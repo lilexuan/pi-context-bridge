@@ -88,7 +88,7 @@ describe("Pi extension integration", () => {
     const context = {
       cwd: workspace,
       signal: new AbortController().signal,
-      ui: { setStatus: vi.fn(), notify: vi.fn(), select: vi.fn() },
+      ui: { setWidget: vi.fn(), notify: vi.fn(), select: vi.fn() },
     } as unknown as ExtensionContext;
     await handlers.get("session_start")?.({}, context);
     const result = await handlers.get("before_agent_start")?.({}, context);
@@ -137,11 +137,11 @@ describe("Pi extension integration", () => {
     } as unknown as ExtensionAPI;
     piContextBridge(extensionApi);
 
-    const setStatus = vi.fn();
+    const setWidget = vi.fn();
     const context = {
       cwd: "/workspace",
       signal: new AbortController().signal,
-      ui: { setStatus, notify: vi.fn(), select: vi.fn() },
+      ui: { setWidget, notify: vi.fn(), select: vi.fn() },
     } as unknown as ExtensionContext;
 
     const record: BridgeInstanceRecord = {
@@ -179,7 +179,11 @@ describe("Pi extension integration", () => {
     snapshot.activeEditor.selection.end.line = 6;
 
     await vi.waitFor(() => {
-      expect(setStatus).toHaveBeenCalledWith("pi-context-bridge", "VS Code: app.ts cursor 7:1");
+      expect(setWidget).toHaveBeenCalledWith(
+        "pi-context-bridge",
+        expect.any(Function),
+        { placement: "aboveEditor" },
+      );
     }, { timeout: 1_000 });
     await handlers.get("session_shutdown")?.({}, context);
   });

@@ -4,6 +4,7 @@ import type { BridgeInstanceRecord, EditorContextSnapshot } from "@pi-context-br
 import { getContext, getHealth, setSelectionSharing } from "./client.js";
 import { discoverInstance, loadInstances } from "./discovery.js";
 import { formatContext, instanceLabel, statusLabel } from "./format.js";
+import { createStatusWidget } from "./status-widget.js";
 
 const STATUS_ID = "pi-context-bridge";
 const LIVE_REFRESH_INTERVAL_MS = 250;
@@ -23,7 +24,7 @@ export default function piContextBridge(pi: ExtensionAPI): void {
     const label = statusLabel(latestSnapshot, connected);
     if (label === lastStatusLabel) return;
     lastStatusLabel = label;
-    ctx.ui.setStatus(STATUS_ID, label);
+    ctx.ui.setWidget(STATUS_ID, createStatusWidget(label), { placement: "aboveEditor" });
   };
 
   const stopLiveRefresh = (): void => {
@@ -130,7 +131,7 @@ export default function piContextBridge(pi: ExtensionAPI): void {
   pi.on("session_shutdown", async (_event, ctx) => {
     stopLiveRefresh();
     lastStatusLabel = undefined;
-    ctx.ui.setStatus(STATUS_ID, undefined);
+    ctx.ui.setWidget(STATUS_ID, undefined);
   });
 
   pi.registerTool({

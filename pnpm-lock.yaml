@@ -29,6 +29,9 @@ importers:
 
   packages/pi-extension:
     dependencies:
+      '@earendil-works/pi-tui':
+        specifier: ^0.80.6
+        version: 0.80.6
       typebox:
         specifier: ^1.3.6
         version: 1.3.6
