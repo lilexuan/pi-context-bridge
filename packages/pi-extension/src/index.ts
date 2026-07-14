@@ -42,7 +42,6 @@ export default function piContextBridge(pi: ExtensionAPI): void {
       connected = route.instance;
       manuallyDisconnected = false;
       discoveryNoticeShown = false;
-      updateStatus(ctx);
       return connected;
     }
     connected = undefined;
@@ -75,7 +74,6 @@ export default function piContextBridge(pi: ExtensionAPI): void {
       if (signal?.aborted) return undefined;
       connected = undefined;
       latestSnapshot = undefined;
-      updateStatus(ctx);
       const replacement = await connectAutomatically(ctx.cwd, ctx);
       if (!replacement) return undefined;
       try {
