@@ -1,0 +1,33 @@
+{
+  "name": "pi-context-bridge",
+  "version": "0.1.2",
+  "description": "Give Pi coding agent live VS Code context from any local terminal.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi", "vscode", "context", "coding-agent"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pi-context-bridge/pi-context-bridge"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "pi": {
+    "extensions": ["./dist/index.js"]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && node esbuild.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package:tarball": "corepack pnpm build && corepack pnpm pack --pack-destination ."
+  },
+  "dependencies": {
+    "typebox": "^1.3.6"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.80.6",
+    "@types/node": "^24.10.1",
+    "esbuild": "^0.27.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

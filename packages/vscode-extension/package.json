@@ -1,0 +1,61 @@
+{
+  "name": "pi-context-bridge-vscode",
+  "displayName": "Pi Context Bridge",
+  "version": "0.1.2",
+  "description": "Share live VS Code editor context with Pi coding agent sessions in any local terminal.",
+  "publisher": "pi-context-bridge",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pi-context-bridge/pi-context-bridge"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": ["AI", "Other"],
+  "keywords": ["pi", "coding-agent", "context", "terminal"],
+  "extensionKind": ["ui"],
+  "main": "./dist/extension.cjs",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      { "command": "piContextBridge.showStatus", "title": "Pi Context Bridge: Show Status" },
+      { "command": "piContextBridge.toggleSelectionSharing", "title": "Pi Context Bridge: Toggle Selection Sharing" },
+      { "command": "piContextBridge.copyInstallationInstructions", "title": "Pi Context Bridge: Copy Installation Instructions" }
+    ],
+    "configuration": {
+      "title": "Pi Context Bridge",
+      "properties": {
+        "piContextBridge.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Expose local editor context to authenticated Pi Context Bridge clients."
+        },
+        "piContextBridge.shareSelectionText": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include selected text in context snapshots. File and range metadata remain available when disabled."
+        },
+        "piContextBridge.maxSelectionChars": {
+          "type": "number",
+          "default": 20000,
+          "minimum": 0,
+          "maximum": 200000,
+          "description": "Maximum selected characters returned in a context snapshot."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && node esbuild.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package": "corepack pnpm build && vsce package --no-dependencies --out pi-context-bridge.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.27.0",
+    "typescript": "^5.9.3"
+  }
+}
