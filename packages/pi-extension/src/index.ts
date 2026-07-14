@@ -6,15 +6,33 @@ import { discoverInstance, loadInstances } from "./discovery.js";
 import { formatContext, instanceLabel, statusLabel } from "./format.js";
 
 const STATUS_ID = "pi-context-bridge";
+const LIVE_REFRESH_INTERVAL_MS = 250;
 
 export default function piContextBridge(pi: ExtensionAPI): void {
   let connected: BridgeInstanceRecord | undefined;
   let latestSnapshot: EditorContextSnapshot | undefined;
   let manuallyDisconnected = false;
   let discoveryNoticeShown = false;
+  let liveRefreshTimer: NodeJS.Timeout | undefined;
+  let liveRefreshAbortController: AbortController | undefined;
+  let liveRefreshInFlight = false;
+  let liveRefreshRunId = 0;
+  let lastStatusLabel: string | undefined;
 
   const updateStatus = (ctx: ExtensionContext): void => {
-    ctx.ui.setStatus(STATUS_ID, statusLabel(latestSnapshot, connected));
+    const label = statusLabel(latestSnapshot, connected);
+    if (label === lastStatusLabel) return;
+    lastStatusLabel = label;
+    ctx.ui.setStatus(STATUS_ID, label);
+  };
+
+  const stopLiveRefresh = (): void => {
+    liveRefreshRunId += 1;
+    if (liveRefreshTimer) clearInterval(liveRefreshTimer);
+    liveRefreshAbortController?.abort();
+    liveRefreshTimer = undefined;
+    liveRefreshAbortController = undefined;
+    liveRefreshInFlight = false;
   };
 
   const connectAutomatically = async (cwd: string, ctx: ExtensionContext): Promise<BridgeInstanceRecord | undefined> => {
@@ -53,6 +71,7 @@ export default function piContextBridge(pi: ExtensionAPI): void {
       updateStatus(ctx);
       return latestSnapshot;
     } catch {
+      if (signal?.aborted) return undefined;
       connected = undefined;
       latestSnapshot = undefined;
       updateStatus(ctx);
@@ -71,10 +90,29 @@ export default function piContextBridge(pi: ExtensionAPI): void {
     }
   };
 
+  const startLiveRefresh = (ctx: ExtensionContext): void => {
+    stopLiveRefresh();
+    const runId = liveRefreshRunId;
+    liveRefreshTimer = setInterval(() => {
+      if (liveRefreshInFlight || manuallyDisconnected) return;
+      liveRefreshInFlight = true;
+      const controller = new AbortController();
+      liveRefreshAbortController = controller;
+      void refreshContext(ctx, controller.signal).finally(() => {
+        if (runId !== liveRefreshRunId) return;
+        liveRefreshAbortController = undefined;
+        liveRefreshInFlight = false;
+      });
+    }, LIVE_REFRESH_INTERVAL_MS);
+    liveRefreshTimer.unref();
+  };
+
   pi.on("session_start", async (_event, ctx) => {
+    stopLiveRefresh();
     manuallyDisconnected = false;
     discoveryNoticeShown = false;
-    await connectAutomatically(ctx.cwd, ctx);
+    await refreshContext(ctx);
+    startLiveRefresh(ctx);
   });
 
   pi.on("before_agent_start", async (_event, ctx) => {
@@ -90,6 +128,8 @@ export default function piContextBridge(pi: ExtensionAPI): void {
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
+    stopLiveRefresh();
+    lastStatusLabel = undefined;
     ctx.ui.setStatus(STATUS_ID, undefined);
   });
 
@@ -149,12 +189,14 @@ export default function piContextBridge(pi: ExtensionAPI): void {
         latestSnapshot = undefined;
         manuallyDisconnected = false;
         discoveryNoticeShown = false;
-        updateStatus(ctx);
+        await refreshContext(ctx);
+        startLiveRefresh(ctx);
         ctx.ui.notify(`Connected to ${selected}.`, "info");
         return;
       }
 
       if (subcommand === "disconnect") {
+        stopLiveRefresh();
         connected = undefined;
         latestSnapshot = undefined;
         manuallyDisconnected = true;
