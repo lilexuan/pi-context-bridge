@@ -187,4 +187,85 @@ describe("Pi extension integration", () => {
     }, { timeout: 1_000 });
     await handlers.get("session_shutdown")?.({}, context);
   });
+
+  it("keeps the disconnected status stable after VS Code closes", async () => {
+    const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pi-context-disconnect-"));
+    const oldUserProfile = process.env.USERPROFILE;
+    const oldXdgRuntimeDirectory = process.env.XDG_RUNTIME_DIR;
+    if (process.platform === "win32") process.env.USERPROFILE = runtimeRoot;
+    else process.env.XDG_RUNTIME_DIR = runtimeRoot;
+    cleanup.push(async () => {
+      if (oldUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = oldUserProfile;
+      if (oldXdgRuntimeDirectory === undefined) delete process.env.XDG_RUNTIME_DIR;
+      else process.env.XDG_RUNTIME_DIR = oldXdgRuntimeDirectory;
+      await fs.rm(runtimeRoot, { recursive: true, force: true });
+    });
+
+    const workspace = path.join(runtimeRoot, "workspace");
+    const snapshot = {
+      protocolVersion: PROTOCOL_VERSION,
+      instanceId: "closing-instance",
+      capturedAt: new Date().toISOString(),
+      appName: "Code",
+      workspaceFolders: [{ name: "workspace", uri: `file://${workspace}`, fsPath: workspace }],
+      activeEditor: null,
+      openEditors: [],
+      selectionTextSharingEnabled: true,
+    } satisfies EditorContextSnapshot;
+    const server = http.createServer((_request, response) => {
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify(snapshot));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("fixture server did not bind");
+
+    const record: BridgeInstanceRecord = {
+      protocolVersion: PROTOCOL_VERSION,
+      instanceId: "closing-instance",
+      pid: process.pid,
+      endpoint: `http://127.0.0.1:${address.port}`,
+      token: "secret",
+      appName: "Code",
+      platform: process.platform,
+      createdAt: new Date().toISOString(),
+      lastFocusedAt: new Date().toISOString(),
+      workspaceFolders: snapshot.workspaceFolders,
+    };
+    const registryDirectory = getRegistryDirectory();
+    await fs.mkdir(registryDirectory, { recursive: true });
+    await fs.writeFile(path.join(registryDirectory, "closing-instance.json"), JSON.stringify(record));
+
+    const handlers = new Map<string, (...arguments_: any[]) => Promise<any>>();
+    const extensionApi = {
+      on: vi.fn((name: string, handler: (...arguments_: any[]) => Promise<any>) => handlers.set(name, handler)),
+      registerTool: vi.fn(),
+      registerCommand: vi.fn(),
+    } as unknown as ExtensionAPI;
+    piContextBridge(extensionApi);
+
+    const renderedLabels: string[] = [];
+    const setWidget = vi.fn((_id: string, factory: any) => {
+      if (!factory) return;
+      const component = factory({}, { fg: (_color: string, text: string) => text });
+      renderedLabels.push(component.render(80)[0].trim());
+    });
+    const context = {
+      cwd: workspace,
+      signal: new AbortController().signal,
+      ui: { setWidget, notify: vi.fn(), select: vi.fn() },
+    } as unknown as ExtensionContext;
+
+    await handlers.get("session_start")?.({}, context);
+    expect(renderedLabels.at(-1)).toBe("VS Code: workspace");
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+
+    await vi.waitFor(() => expect(renderedLabels.at(-1)).toBe("VS Code: disconnected"), { timeout: 2_000 });
+    const updatesAfterDisconnect = setWidget.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    expect(setWidget).toHaveBeenCalledTimes(updatesAfterDisconnect);
+
+    await handlers.get("session_shutdown")?.({}, context);
+  });
 });
