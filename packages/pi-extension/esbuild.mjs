@@ -8,7 +8,7 @@ await build({
   platform: "node",
   format: "esm",
   target: "node20",
-  external: ["@earendil-works/pi-coding-agent", "typebox"],
+  external: ["@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "typebox"],
   alias: {
     "@pi-context-bridge/protocol": path.resolve("../protocol/src/index.ts"),
   },
