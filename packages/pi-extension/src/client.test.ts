@@ -6,15 +6,16 @@ import { getContext, setSelectionSharing } from "./client.js";
 const servers: http.Server[] = [];
 afterEach(async () => Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve())))));
 
-async function fixtureServer(): Promise<BridgeInstanceRecord> {
+async function fixtureServer(onRequest?: (url: string) => void, responseBody?: string): Promise<BridgeInstanceRecord> {
   const server = http.createServer((request, response) => {
+    onRequest?.(request.url ?? "");
     if (request.headers.authorization !== "Bearer secret") {
       response.writeHead(401).end();
       return;
     }
     response.setHeader("Content-Type", "application/json");
     if (request.url === "/v1/settings/selection-sharing") response.end(JSON.stringify({ enabled: false }));
-    else response.end(JSON.stringify({
+    else response.end(responseBody ?? JSON.stringify({
       protocolVersion: PROTOCOL_VERSION,
       instanceId: "test",
       capturedAt: new Date().toISOString(),
@@ -45,5 +46,17 @@ async function fixtureServer(): Promise<BridgeInstanceRecord> {
 
 describe("bridge client", () => {
   it("authenticates and fetches context", async () => expect((await getContext(await fixtureServer())).instanceId).toBe("test"));
+  it("can omit selection text from lightweight background refreshes", async () => {
+    const urls: string[] = [];
+    const instance = await fixtureServer((url) => urls.push(url));
+
+    await getContext(instance, undefined, false);
+
+    expect(urls).toEqual(["/v1/context?includeSelectionText=false"]);
+  });
+  it("rejects unexpectedly large responses instead of retaining them", async () => {
+    const instance = await fixtureServer(undefined, "x".repeat(1_048_577));
+    await expect(getContext(instance)).rejects.toThrow("response is too large");
+  });
   it("changes selection sharing", async () => expect(await setSelectionSharing(await fixtureServer(), false)).toEqual({ enabled: false }));
 });

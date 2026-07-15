@@ -261,7 +261,7 @@ describe("Pi extension integration", () => {
     expect(renderedLabels.at(-1)).toBe("VS Code: workspace");
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 
-    await vi.waitFor(() => expect(renderedLabels.at(-1)).toBe("VS Code: disconnected"), { timeout: 2_000 });
+    await vi.waitFor(() => expect(renderedLabels.at(-1)).toBe("VS Code: disconnected"), { timeout: 3_000 });
     const updatesAfterDisconnect = setWidget.mock.calls.length;
     await new Promise((resolve) => setTimeout(resolve, 750));
     expect(setWidget).toHaveBeenCalledTimes(updatesAfterDisconnect);

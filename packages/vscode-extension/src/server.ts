@@ -52,7 +52,8 @@ export async function startBridgeServer(instanceId: string): Promise<RunningBrid
         return;
       }
       if (request.method === "GET" && url.pathname === "/v1/context") {
-        sendJson(response, 200, captureContext(instanceId));
+        const includeSelectionText = url.searchParams.get("includeSelectionText") !== "false";
+        sendJson(response, 200, captureContext(instanceId, includeSelectionText));
         return;
       }
       if (request.method === "POST" && url.pathname === "/v1/settings/selection-sharing") {

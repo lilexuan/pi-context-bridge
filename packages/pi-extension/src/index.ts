@@ -1,5 +1,4 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
 import type { BridgeInstanceRecord, EditorContextSnapshot } from "@pi-context-bridge/protocol";
 import { getContext, getHealth, setSelectionSharing } from "./client.js";
 import { discoverInstance, loadInstances } from "./discovery.js";
@@ -7,7 +6,10 @@ import { formatContext, instanceLabel, statusLabel } from "./format.js";
 import { createStatusWidget } from "./status-widget.js";
 
 const STATUS_ID = "pi-context-bridge";
-const LIVE_REFRESH_INTERVAL_MS = 250;
+// Agent starts and explicit context requests always fetch immediately. The
+// background refresh only keeps the small status widget current, so a slower
+// cadence avoids unnecessary HTTP/JSON/GC churn while Pi is idle.
+const LIVE_REFRESH_INTERVAL_MS = 2_000;
 
 export default function piContextBridge(pi: ExtensionAPI): void {
   let connected: BridgeInstanceRecord | undefined;
@@ -63,11 +65,15 @@ export default function piContextBridge(pi: ExtensionAPI): void {
     return connectAutomatically(ctx.cwd, ctx);
   };
 
-  const refreshContext = async (ctx: ExtensionContext, signal?: AbortSignal): Promise<EditorContextSnapshot | undefined> => {
+  const refreshContext = async (
+    ctx: ExtensionContext,
+    signal?: AbortSignal,
+    includeSelectionText = true,
+  ): Promise<EditorContextSnapshot | undefined> => {
     const instance = await ensureConnection(ctx);
     if (!instance) return undefined;
     try {
-      latestSnapshot = await getContext(instance, signal);
+      latestSnapshot = await getContext(instance, signal, includeSelectionText);
       updateStatus(ctx);
       return latestSnapshot;
     } catch {
@@ -77,7 +83,7 @@ export default function piContextBridge(pi: ExtensionAPI): void {
       const replacement = await connectAutomatically(ctx.cwd, ctx);
       if (!replacement) return undefined;
       try {
-        latestSnapshot = await getContext(replacement, signal);
+        latestSnapshot = await getContext(replacement, signal, includeSelectionText);
         updateStatus(ctx);
         return latestSnapshot;
       } catch {
@@ -97,7 +103,7 @@ export default function piContextBridge(pi: ExtensionAPI): void {
       liveRefreshInFlight = true;
       const controller = new AbortController();
       liveRefreshAbortController = controller;
-      void refreshContext(ctx, controller.signal).finally(() => {
+      void refreshContext(ctx, controller.signal, false).finally(() => {
         if (runId !== liveRefreshRunId) return;
         liveRefreshAbortController = undefined;
         liveRefreshInFlight = false;
@@ -110,7 +116,7 @@ export default function piContextBridge(pi: ExtensionAPI): void {
     stopLiveRefresh();
     manuallyDisconnected = false;
     discoveryNoticeShown = false;
-    await refreshContext(ctx);
+    await refreshContext(ctx, undefined, false);
     startLiveRefresh(ctx);
   });
 
@@ -136,7 +142,9 @@ export default function piContextBridge(pi: ExtensionAPI): void {
     name: "vscode_get_context",
     label: "VS Code Context",
     description: "Get the live active file, cursor, selection, selected text (when sharing is enabled), workspace folders, and open editors from VS Code.",
-    parameters: Type.Object({}),
+    // This is the exact JSON schema emitted by Type.Object({}). Keeping the
+    // trivial schema inline avoids loading an entire schema-builder package.
+    parameters: { type: "object", properties: {} },
     async execute(_toolCallId, _parameters, signal, _onUpdate, ctx) {
       const snapshot = await refreshContext(ctx, signal);
       if (!snapshot) {
@@ -188,7 +196,7 @@ export default function piContextBridge(pi: ExtensionAPI): void {
         latestSnapshot = undefined;
         manuallyDisconnected = false;
         discoveryNoticeShown = false;
-        await refreshContext(ctx);
+        await refreshContext(ctx, undefined, false);
         startLiveRefresh(ctx);
         ctx.ui.notify(`Connected to ${selected}.`, "info");
         return;
@@ -217,7 +225,7 @@ export default function piContextBridge(pi: ExtensionAPI): void {
           return;
         }
         const result = await setSelectionSharing(connected, !snapshot.selectionTextSharingEnabled);
-        latestSnapshot = await getContext(connected, ctx.signal);
+        latestSnapshot = await getContext(connected, ctx.signal, false);
         updateStatus(ctx);
         ctx.ui.notify(`VS Code selection text sharing ${result.enabled ? "enabled" : "disabled"}.`, "info");
         return;

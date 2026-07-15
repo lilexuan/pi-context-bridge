@@ -19,8 +19,7 @@
     "package:tarball": "corepack pnpm build && corepack pnpm pack --pack-destination ."
   },
   "dependencies": {
-    "@earendil-works/pi-tui": "^0.80.6",
-    "typebox": "^1.3.6"
+    "@earendil-works/pi-tui": "^0.80.6"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.80.6",
