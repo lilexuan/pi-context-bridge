@@ -13,6 +13,7 @@
     "typecheck": "corepack pnpm -r typecheck",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:memory": "node --expose-gc scripts/memory-stress.mjs",
     "test:watch": "vitest",
     "package:vscode": "corepack pnpm --filter pi-context-bridge-vscode package",
     "package:pi": "corepack pnpm --filter pi-context-bridge build && corepack pnpm --filter pi-context-bridge pack"

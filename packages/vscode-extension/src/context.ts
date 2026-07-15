@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
 import {
   PROTOCOL_VERSION,
-  truncateSelection,
   type EditorContext,
   type EditorContextSnapshot,
   type WorkspaceFolderContext,
 } from "@pi-context-bridge/protocol";
+import { planSelectionRead } from "./selection.js";
 
 export function workspaceFolders(): WorkspaceFolderContext[] {
   return (vscode.workspace.workspaceFolders ?? []).map((folder) => ({
@@ -44,7 +44,7 @@ function openTextUris(): vscode.Uri[] {
   return [...result.values()];
 }
 
-export function captureContext(instanceId: string): EditorContextSnapshot {
+export function captureContext(instanceId: string, includeSelectionText = true): EditorContextSnapshot {
   const configuration = vscode.workspace.getConfiguration("piContextBridge");
   const shareSelectionText = configuration.get<boolean>("shareSelectionText", true);
   const maximumSelectionCharacters = configuration.get<number>("maxSelectionChars", 20000);
@@ -53,9 +53,14 @@ export function captureContext(instanceId: string): EditorContextSnapshot {
 
   if (active) {
     const selection = active.selection;
-    const textDetails = !selection.isEmpty && shareSelectionText
-      ? truncateSelection(active.document.getText(selection), maximumSelectionCharacters)
-      : {};
+    let textDetails = {};
+    if (!selection.isEmpty && shareSelectionText && includeSelectionText) {
+      const plan = planSelectionRead(active.document, selection, maximumSelectionCharacters);
+      const text = active.document.getText(new vscode.Range(selection.start, plan.end));
+      textDetails = plan.truncated
+        ? { text, truncated: true, originalCharacterCount: plan.originalCharacterCount }
+        : { text, truncated: false };
+    }
     activeEditor = {
       ...serializeDocument(active.document, true),
       cursor: { line: selection.active.line, character: selection.active.character },
@@ -69,16 +74,20 @@ export function captureContext(instanceId: string): EditorContextSnapshot {
   }
 
   const activeUri = active?.document.uri.toString();
+  const documentsByUri = new Map(
+    vscode.workspace.textDocuments.map((document) => [document.uri.toString(), document]),
+  );
   const openEditors = openTextUris().map((uri) => {
-    const document = vscode.workspace.textDocuments.find((candidate) => candidate.uri.toString() === uri.toString());
-    if (document) return serializeDocument(document, uri.toString() === activeUri);
+    const uriString = uri.toString();
+    const document = documentsByUri.get(uriString);
+    if (document) return serializeDocument(document, uriString === activeUri);
     return {
-      uri: uri.toString(),
+      uri: uriString,
       fsPath: uri.fsPath,
       relativePath: relativePath(uri),
       languageId: "unknown",
       isDirty: false,
-      isActive: uri.toString() === activeUri,
+      isActive: uriString === activeUri,
     };
   });
 
