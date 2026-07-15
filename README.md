@@ -8,6 +8,7 @@ Pi Context Bridge is a small, local-only pair of extensions:
 
 - The **VS Code extension** captures your workspace, active file, cursor, selection, dirty state, and open editors.
 - The **Pi extension** finds the VS Code window that matches Pi's working directory and adds the latest editor context to each prompt.
+- Automatically injected context is transient for the current agent turn; it is not appended as a hidden message to Pi's session history.
 
 ## Quickstart
 
@@ -97,6 +98,7 @@ Install dependencies and run all checks:
 corepack pnpm install
 corepack pnpm build
 corepack pnpm test
+corepack pnpm test:memory
 ```
 
 Press F5 from `packages/vscode-extension` to run an Extension Development Host. To package both artifacts:

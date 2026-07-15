@@ -8,6 +8,7 @@ Pi Context Bridge 由两个轻量、本地运行的扩展组成：
 
 - **VS Code 扩展**采集工作区、当前文件、光标、选区、未保存状态和已打开的编辑器。
 - **Pi 扩展**根据 Pi 的工作目录找到对应的 VS Code 窗口，并在每次提问前加入最新的编辑器上下文。
+- 自动加入的上下文只在当前 agent 回合临时生效，不会作为隐藏消息不断追加到 Pi 的会话历史中。
 
 ## 快速开始
 
@@ -97,6 +98,7 @@ Pi 扩展提供以下命令：
 corepack pnpm install
 corepack pnpm build
 corepack pnpm test
+corepack pnpm test:memory
 ```
 
 在 `packages/vscode-extension` 中按 F5 可以启动扩展开发宿主。要打包两个扩展，请运行：

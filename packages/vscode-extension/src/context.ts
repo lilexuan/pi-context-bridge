@@ -3,9 +3,11 @@ import {
   PROTOCOL_VERSION,
   type EditorContext,
   type EditorContextSnapshot,
+  type EditorStatusContext,
+  type EditorStatusSnapshot,
   type WorkspaceFolderContext,
 } from "@pi-context-bridge/protocol";
-import { planSelectionRead } from "./selection.js";
+import { DEFAULT_MAXIMUM_SELECTION_CHARACTERS, planSelectionRead } from "./selection.js";
 
 export function workspaceFolders(): WorkspaceFolderContext[] {
   return (vscode.workspace.workspaceFolders ?? []).map((folder) => ({
@@ -30,6 +32,21 @@ function serializeDocument(document: vscode.TextDocument, isActive: boolean): Ed
   };
 }
 
+function serializeStatusEditor(editor: vscode.TextEditor): EditorStatusContext {
+  const { document, selection } = editor;
+  return {
+    uri: document.uri.toString(),
+    fsPath: document.uri.fsPath,
+    relativePath: relativePath(document.uri),
+    cursor: { line: selection.active.line, character: selection.active.character },
+    selection: {
+      start: { line: selection.start.line, character: selection.start.character },
+      end: { line: selection.end.line, character: selection.end.character },
+      isEmpty: selection.isEmpty,
+    },
+  };
+}
+
 function openTextUris(): vscode.Uri[] {
   const result = new Map<string, vscode.Uri>();
   for (const group of vscode.window.tabGroups.all) {
@@ -47,7 +64,10 @@ function openTextUris(): vscode.Uri[] {
 export function captureContext(instanceId: string, includeSelectionText = true): EditorContextSnapshot {
   const configuration = vscode.workspace.getConfiguration("piContextBridge");
   const shareSelectionText = configuration.get<boolean>("shareSelectionText", true);
-  const maximumSelectionCharacters = configuration.get<number>("maxSelectionChars", 20000);
+  const maximumSelectionCharacters = configuration.get<number>(
+    "maxSelectionChars",
+    DEFAULT_MAXIMUM_SELECTION_CHARACTERS,
+  );
   const active = vscode.window.activeTextEditor;
   let activeEditor: EditorContext | null = null;
 
@@ -99,6 +119,21 @@ export function captureContext(instanceId: string, includeSelectionText = true):
     workspaceFolders: workspaceFolders(),
     activeEditor,
     openEditors,
+    selectionTextSharingEnabled: shareSelectionText,
+  };
+}
+
+export function captureStatus(instanceId: string): EditorStatusSnapshot {
+  const shareSelectionText = vscode.workspace
+    .getConfiguration("piContextBridge")
+    .get<boolean>("shareSelectionText", true);
+  const active = vscode.window.activeTextEditor;
+  return {
+    protocolVersion: PROTOCOL_VERSION,
+    instanceId,
+    capturedAt: new Date().toISOString(),
+    appName: vscode.env.appName,
+    activeEditor: active ? serializeStatusEditor(active) : null,
     selectionTextSharingEnabled: shareSelectionText,
   };
 }
