@@ -4,26 +4,29 @@ import { PROTOCOL_VERSION, type BridgeInstanceRecord } from "@pi-context-bridge/
 import { workspaceFolders } from "./context.js";
 import { InstanceRegistry } from "./registry.js";
 import { startBridgeServer, type RunningBridgeServer } from "./server.js";
+import { createStatusBarUpdater } from "./status.js";
 
 const INSTALLATION_INSTRUCTIONS = "Install the Pi extension with: pi install npm:pi-context-bridge";
+let deactivateActiveBridge: (() => Promise<void>) | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   status.command = "piContextBridge.toggleSelectionSharing";
   context.subscriptions.push(status);
+  const renderStatus = createStatusBarUpdater(status);
 
   if (vscode.env.remoteName) {
-    status.text = "$(debug-disconnect) Pi Context: remote unsupported";
-    status.tooltip = `Pi Context Bridge does not support ${vscode.env.remoteName} in v1.`;
-    status.show();
+    renderStatus(
+      "$(debug-disconnect) Pi Context: remote unsupported",
+      `Pi Context Bridge does not support ${vscode.env.remoteName} in v1.`,
+    );
     registerCommands(context, status, undefined);
     return;
   }
 
   const enabled = vscode.workspace.getConfiguration("piContextBridge").get<boolean>("enabled", true);
   if (!enabled) {
-    status.text = "$(circle-slash) Pi Context: disabled";
-    status.show();
+    renderStatus("$(circle-slash) Pi Context: disabled", undefined);
     registerCommands(context, status, undefined);
     return;
   }
@@ -34,61 +37,91 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const bridge = await startBridgeServer(instanceId);
   const createdAt = new Date().toISOString();
   let lastFocusedAt = createdAt;
+  let disposed = false;
+  let writeQueue = Promise.resolve();
+  let cleanupPromise: Promise<void> | undefined;
 
-  const writeRecord = async (): Promise<void> => {
-    const record: BridgeInstanceRecord = {
-      protocolVersion: PROTOCOL_VERSION,
-      instanceId,
-      pid: process.pid,
-      endpoint: bridge.endpoint,
-      token: bridge.token,
-      appName: vscode.env.appName,
-      platform: process.platform,
-      createdAt,
-      lastFocusedAt,
-      workspaceFolders: workspaceFolders(),
-    };
-    await registry.write(record);
+  const writeRecord = (): Promise<void> => {
+    if (disposed) return Promise.resolve();
+    const operation = writeQueue.then(async () => {
+      if (disposed) return;
+      const record: BridgeInstanceRecord = {
+        protocolVersion: PROTOCOL_VERSION,
+        instanceId,
+        pid: process.pid,
+        endpoint: bridge.endpoint,
+        token: bridge.token,
+        appName: vscode.env.appName,
+        platform: process.platform,
+        createdAt,
+        lastFocusedAt,
+        workspaceFolders: workspaceFolders(),
+      };
+      await registry.write(record);
+    });
+    // Keep the queue usable after a transient write failure while returning the
+    // original operation to callers that need to observe that failure.
+    writeQueue = operation.catch(() => undefined);
+    return operation;
   };
+  const cleanup = (): Promise<void> => {
+    cleanupPromise ??= (async () => {
+      disposed = true;
+      const closeBridge = bridge.dispose();
+      await writeQueue;
+      await Promise.all([closeBridge, registry.remove()]);
+    })();
+    return cleanupPromise;
+  };
+  deactivateActiveBridge = cleanup;
 
   const updateStatus = (): void => {
     const configuration = vscode.workspace.getConfiguration("piContextBridge");
     const enabledNow = configuration.get<boolean>("enabled", true);
     const sharing = configuration.get<boolean>("shareSelectionText", true);
     if (!enabledNow) {
-      status.text = "$(circle-slash) Pi Context: disabled";
-      status.tooltip = "Pi Context Bridge is disabled. Re-enable it in settings to resume sharing.";
-      status.show();
+      renderStatus(
+        "$(circle-slash) Pi Context: disabled",
+        "Pi Context Bridge is disabled. Re-enable it in settings to resume sharing.",
+      );
       return;
     }
     const editor = vscode.window.activeTextEditor;
     const location = editor
       ? `${vscode.workspace.asRelativePath(editor.document.uri, false)}:${editor.selection.active.line + 1}`
       : "no active file";
-    status.text = `${sharing ? "$(eye)" : "$(eye-closed)"} Pi Context: ${location}`;
-    status.tooltip = `Bridge: ${bridge.endpoint}\nSelection text sharing: ${sharing ? "on" : "off"}\nClick to toggle selection text sharing.`;
-    status.show();
+    renderStatus(
+      `${sharing ? "$(eye)" : "$(eye-closed)"} Pi Context: ${location}`,
+      `Bridge: ${bridge.endpoint}\nSelection text sharing: ${sharing ? "on" : "off"}\nClick to toggle selection text sharing.`,
+    );
   };
 
-  await writeRecord();
+  try {
+    await writeRecord();
+  } catch (error) {
+    await cleanup().catch(() => undefined);
+    throw error;
+  }
   updateStatus();
   registerCommands(context, status, bridge);
 
   const refresh = (): void => updateStatus();
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(refresh),
-    vscode.window.onDidChangeTextEditorSelection(refresh),
+    vscode.window.onDidChangeTextEditorSelection((event) => {
+      if (event.textEditor === vscode.window.activeTextEditor) refresh();
+    }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("piContextBridge")) updateStatus();
     }),
-    vscode.workspace.onDidChangeWorkspaceFolders(() => void writeRecord()),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => void writeRecord().catch(() => undefined)),
     vscode.window.onDidChangeWindowState((state) => {
       if (state.focused) {
         lastFocusedAt = new Date().toISOString();
-        void writeRecord();
+        void writeRecord().catch(() => undefined);
       }
     }),
-    { dispose: () => { void registry.remove(); void bridge.dispose(); } },
+    { dispose: () => { void cleanup().catch(() => undefined); } },
   );
 }
 
@@ -118,4 +151,8 @@ function registerCommands(
   );
 }
 
-export function deactivate(): void {}
+export async function deactivate(): Promise<void> {
+  const cleanup = deactivateActiveBridge;
+  deactivateActiveBridge = undefined;
+  await cleanup?.();
+}

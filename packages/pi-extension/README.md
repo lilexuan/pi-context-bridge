@@ -10,7 +10,7 @@ pi install npm:pi-context-bridge
 
 Install **Pi Context Bridge** separately from the VS Code Marketplace or Open VSX, then open the same project in VS Code and run Pi from any terminal.
 
-Pi automatically matches its working directory to the deepest VS Code workspace. It injects lightweight editor context before each prompt and exposes `vscode_get_context` for live refreshes.
+Pi automatically matches its working directory to the deepest VS Code workspace. It injects lightweight editor context transiently for the current agent turn (without appending a hidden session-history message) and exposes `vscode_get_context` for live refreshes.
 
 Commands:
 

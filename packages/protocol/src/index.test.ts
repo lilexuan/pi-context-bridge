@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { PROTOCOL_VERSION, routeInstance, truncateSelection, type BridgeInstanceRecord } from "./index.js";
+import {
+  MAXIMUM_REGISTRY_FILE_BYTES,
+  PROTOCOL_VERSION,
+  isRegistryInstanceFileName,
+  routeInstance,
+  truncateSelection,
+  type BridgeInstanceRecord,
+} from "./index.js";
 
 function instance(id: string, folder: string, focused: string): BridgeInstanceRecord {
   return {
@@ -52,4 +59,17 @@ describe("routeInstance", () => {
 describe("truncateSelection", () => {
   it("leaves short text intact", () => expect(truncateSelection("hello", 10)).toEqual({ text: "hello", truncated: false }));
   it("marks truncated text", () => expect(truncateSelection("hello", 3)).toEqual({ text: "hel", truncated: true, originalCharacterCount: 5 }));
+});
+
+describe("registry instance file names", () => {
+  it("recognizes only canonical UUID JSON file names", () => {
+    expect(isRegistryInstanceFileName("123e4567-e89b-12d3-a456-426614174000.json")).toBe(true);
+    expect(isRegistryInstanceFileName("123E4567-E89B-12D3-A456-426614174000.JSON")).toBe(true);
+    expect(isRegistryInstanceFileName("note.json")).toBe(false);
+    expect(isRegistryInstanceFileName("123e4567-e89b-12d3-a456-426614174000.json.tmp")).toBe(false);
+  });
+
+  it("caps registry files at 64 KiB", () => {
+    expect(MAXIMUM_REGISTRY_FILE_BYTES).toBe(65_536);
+  });
 });

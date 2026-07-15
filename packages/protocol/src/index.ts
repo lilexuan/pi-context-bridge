@@ -3,6 +3,13 @@ import path from "node:path";
 
 export const PROTOCOL_VERSION = 1 as const;
 export const REGISTRY_DIRECTORY_NAME = "pi-context-bridge";
+export const MAXIMUM_REGISTRY_FILE_BYTES = 64 * 1024;
+
+const REGISTRY_INSTANCE_FILE_NAME_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.json$/i;
+
+export function isRegistryInstanceFileName(name: string): boolean {
+  return REGISTRY_INSTANCE_FILE_NAME_PATTERN.test(name);
+}
 
 export interface Position {
   line: number;
@@ -43,6 +50,26 @@ export interface EditorContextSnapshot {
   workspaceFolders: WorkspaceFolderContext[];
   activeEditor: EditorContext | null;
   openEditors: EditorContext[];
+  selectionTextSharingEnabled: boolean;
+}
+
+export type EditorStatusSelection = Pick<SelectionContext, "start" | "end" | "isEmpty">;
+
+export interface EditorStatusContext {
+  uri: string;
+  fsPath: string;
+  relativePath?: string;
+  cursor?: Position;
+  selection?: EditorStatusSelection;
+}
+
+/** Lightweight editor state used by the frequently refreshed status widget. */
+export interface EditorStatusSnapshot {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  instanceId: string;
+  capturedAt: string;
+  appName: string;
+  activeEditor: EditorStatusContext | null;
   selectionTextSharingEnabled: boolean;
 }
 

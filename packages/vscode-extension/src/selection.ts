@@ -2,6 +2,9 @@ import type * as vscode from "vscode";
 
 type OffsetDocument = Pick<vscode.TextDocument, "offsetAt" | "positionAt">;
 
+export const DEFAULT_MAXIMUM_SELECTION_CHARACTERS = 20_000;
+export const HARD_MAXIMUM_SELECTION_CHARACTERS = 200_000;
+
 export interface SelectionReadPlan {
   end: vscode.Position;
   originalCharacterCount: number;
@@ -16,12 +19,15 @@ export interface SelectionReadPlan {
 export function planSelectionRead(
   document: OffsetDocument,
   selection: vscode.Selection,
-  maximumCharacters: number,
+  maximumCharacters = DEFAULT_MAXIMUM_SELECTION_CHARACTERS,
 ): SelectionReadPlan {
   const startOffset = document.offsetAt(selection.start);
   const endOffset = document.offsetAt(selection.end);
   const originalCharacterCount = Math.max(0, endOffset - startOffset);
-  const limit = Math.max(0, Math.floor(maximumCharacters));
+  const configuredLimit = Number.isFinite(maximumCharacters)
+    ? Math.max(0, Math.floor(maximumCharacters))
+    : DEFAULT_MAXIMUM_SELECTION_CHARACTERS;
+  const limit = Math.min(configuredLimit, HARD_MAXIMUM_SELECTION_CHARACTERS);
   const truncated = originalCharacterCount > limit;
   return {
     end: truncated ? document.positionAt(startOffset + limit) : selection.end,

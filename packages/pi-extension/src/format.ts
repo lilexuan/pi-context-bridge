@@ -1,4 +1,10 @@
-import type { BridgeInstanceRecord, EditorContextSnapshot, Position, SelectionContext } from "@pi-context-bridge/protocol";
+import type {
+  BridgeInstanceRecord,
+  EditorContextSnapshot,
+  EditorStatusSnapshot,
+  Position,
+  SelectionContext,
+} from "@pi-context-bridge/protocol";
 
 function position(value: Position): string {
   return `${value.line + 1}:${value.character + 1}`;
@@ -15,7 +21,10 @@ export function instanceLabel(instance: BridgeInstanceRecord): string {
   return `${instance.appName}: ${workspaces} (${instance.instanceId.slice(0, 8)})`;
 }
 
-export function statusLabel(snapshot: EditorContextSnapshot | undefined, instance: BridgeInstanceRecord | undefined): string {
+export function statusLabel(
+  snapshot: EditorContextSnapshot | EditorStatusSnapshot | undefined,
+  instance: BridgeInstanceRecord | undefined,
+): string {
   if (!instance) return "VS Code: disconnected";
   if (!snapshot?.activeEditor) return `VS Code: ${instance.workspaceFolders[0]?.name ?? "connected"}`;
   const editor = snapshot.activeEditor;
